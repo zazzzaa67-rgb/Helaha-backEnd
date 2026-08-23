@@ -1,5 +1,5 @@
 // اختبار مسار الأدمن الكامل عبر الـ API كما يفعل المتصفح بالضبط
-const base = "http://localhost:5000/api/admin";
+const base = `${import.meta.env.VITE_API_URL}/api/admin`;
 
 // 1) تسجيل دخول الأدمن
 const loginResponse = await fetch(`${base}/login`, {
