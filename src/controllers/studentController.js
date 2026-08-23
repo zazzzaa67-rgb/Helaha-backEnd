@@ -212,109 +212,167 @@ export const getAvailableExams = async (req, res) => {
 export const submitExam = async (req, res) => {
     try {
         const examId = req.params.examId;
-        const submittedAnswers = Array.isArray(req.body.answers) ? req.body.answers : [];
+        const submittedAnswers = Array.isArray(req.body.answers)
+            ? req.body.answers
+            : [];
 
+        // =========================
+        // Get exam
+        // =========================
         const { data: exam, error: examError } = await supabase
             .from("exams")
-            .select("id, stage, grade, duration_minutes, exam_questions(id, points, correct_answer, topic)")
+            .select(
+                "id, stage, grade, duration_minutes, exam_questions(id, points, correct_answer, topic)"
+            )
             .eq("id", examId)
             .single();
 
         if (examError || !exam) {
-            return res.status(404).json({ message: "Exam not found" });
+            return res.status(404).json({
+                message: "Exam not found",
+            });
         }
+
+        // =========================
+        // Get student
+        // =========================
         const { data: student, error: studentError } = await supabase
             .from("students")
             .select("stage, grade")
             .eq("id", req.user.id)
             .single();
 
-        if (studentError || student.stage !== exam.stage || student.grade !== exam.grade) {
-            return res.status(403).json({ message: "This exam is not available for your class" });
+        if (
+            studentError ||
+            student.stage !== exam.stage ||
+            student.grade !== exam.grade
+        ) {
+            return res.status(403).json({
+                message: "This exam is not available for your class",
+            });
         }
 
-        const answerMap = new Map(submittedAnswers.map((answer) => [answer.question_id, answer.answer]));
+        // =========================
+        // Calculate score
+        // =========================
+        const answerMap = new Map(
+            submittedAnswers.map((answer) => [
+                answer.question_id,
+                answer.answer,
+            ])
+        );
+
         const scoredAnswers = exam.exam_questions.map((question) => {
-            const isCorrect = answerMap.get(question.id) === question.correct_answer;
+            const isCorrect =
+                answerMap.get(question.id) === question.correct_answer;
+
             return {
                 question_id: question.id,
                 is_correct: isCorrect,
                 awarded_points: isCorrect ? question.points : 0,
             };
         });
-        const score = scoredAnswers.reduce((total, answer) => total + answer.awarded_points, 0);
 
+        const score = scoredAnswers.reduce(
+            (total, answer) => total + answer.awarded_points,
+            0
+        );
+
+        const totalPoints = exam.exam_questions.reduce(
+            (total, question) => total + question.points,
+            0
+        );
+        // =========================
+        // Save attempt
+        // =========================
         const { data: attempt, error: attemptError } = await supabase
             .from("exam_attempts")
-            .insert({ exam_id: examId, student_id: req.user.id, score, completed_at: new Date().toISOString() })
+            .insert({
+                exam_id: examId,
+                student_id: req.user.id,
+                score,
+                completed_at: new Date().toISOString(),
+            })
             .select("id, score, completed_at")
             .single();
-
         if (attemptError) {
-            return res.status(500).json({ message: attemptError.message });
+            return res.status(500).json({
+                message: attemptError.message,
+            });
         }
-
+        // =========================
+        // Save answers
+        // =========================
         const { error: answersError } = await supabase
             .from("exam_answers")
-            .insert(scoredAnswers.map((answer) => ({ ...answer, attempt_id: attempt.id })));
-
+            .insert(
+                scoredAnswers.map((answer) => ({
+                    ...answer,
+                    attempt_id: attempt.id,
+                }))
+            );
         if (answersError) {
             await supabase
                 .from("exam_attempts")
                 .delete()
                 .eq("id", attempt.id);
-
             return res.status(500).json({
-                message: answersError.message
+                message: answersError.message,
             });
         }
-
-        // إضافة نقاط الاختبار للطالب
+        // =========================
+        // Update student points
+        // =========================
         const { data: currentStudent, error: currentStudentError } =
             await supabase
                 .from("students")
-                .select('"student-points"')
+                .select('"student-points", points')
                 .eq("id", req.user.id)
                 .single();
-
         if (currentStudentError || !currentStudent) {
             return res.status(500).json({
-                message: "فشل الحصول على نقاط الطالب"
+                message: "فشل الحصول على نقاط الطالب",
             });
         }
-
-        const currentPoints =
+        const currentStudentPoints =
             Number(currentStudent["student-points"]) || 0;
-
-        const newPoints = currentPoints + score;
-
+        const currentTotalPoints =
+            Number(currentStudent.points) || 0;
+        // نقاط الطالب التي حصل عليها فعليًا
+        const newStudentPoints =
+            currentStudentPoints + score;
+        // إجمالي النقاط المتاحة التي دخلت في حساب المستوى
+        const newTotalPoints =
+            currentTotalPoints + totalPoints;
         const { error: pointsError } = await supabase
             .from("students")
             .update({
-                "student-points": newPoints
+                "student-points": newStudentPoints,
+                points: newTotalPoints,
             })
             .eq("id", req.user.id);
-
         if (pointsError) {
             return res.status(500).json({
-                message: pointsError.message
+                message: pointsError.message,
             });
         }
-
+        // =========================
+        // Response
+        // =========================
         return res.json({
             attempt,
             score,
-            totalPoints: exam.exam_questions.reduce(
-                (total, question) => total + question.points,
-                0
-            ),
-            newStudentPoints: newPoints,
+            totalPoints,
+            newStudentPoints,
+            newTotalPoints,
             questionResults: scoredAnswers.map((answer) => ({
                 questionId: answer.question_id,
                 isCorrect: answer.is_correct,
             })),
         });
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return res.status(500).json({
+            message: error.message,
+        });
     }
 };
