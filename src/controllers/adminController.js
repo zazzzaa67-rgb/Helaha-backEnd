@@ -203,7 +203,6 @@ export const getStudentDetails = async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 };
-
 export const addStudent = async (req, res) => {
     try {
         const {
@@ -236,7 +235,7 @@ export const addStudent = async (req, res) => {
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email: internalEmail,
             password,
-            email_confirmed: true,
+            email_confirm: true,
         });
         if (authError) {
             return res.status(400).json({ message: authError.message });
