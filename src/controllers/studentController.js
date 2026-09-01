@@ -182,10 +182,16 @@ export const logIn = async (req, res) => {
 
 export const getAvailableExams = async (req, res) => {
     try {
+        const studentEmail = req.user?.email;
+
+        if (!studentEmail) {
+            return res.status(401).json({ message: "Authentication required" });
+        }
+
         const { data: student, error: studentError } = await supabase
             .from("students")
-            .select("stage, grade")
-            .eq("id", req.user.id)
+            .select("id, stage, grade")
+            .eq("email", studentEmail)
             .single();
 
         if (studentError || !student) {
@@ -238,12 +244,13 @@ export const submitExam = async (req, res) => {
         // =========================
         const { data: student, error: studentError } = await supabase
             .from("students")
-            .select("stage, grade")
-            .eq("id", req.user.id)
+            .select("id, stage, grade")
+            .eq("email", req.user.email)
             .single();
 
         if (
             studentError ||
+            !student ||
             student.stage !== exam.stage ||
             student.grade !== exam.grade
         ) {
@@ -289,7 +296,7 @@ export const submitExam = async (req, res) => {
             .from("exam_attempts")
             .insert({
                 exam_id: examId,
-                student_id: req.user.id,
+                student_id: student.id,
                 score,
                 completed_at: new Date().toISOString(),
             })
@@ -327,7 +334,7 @@ export const submitExam = async (req, res) => {
             await supabase
                 .from("students")
                 .select('"student-points", points')
-                .eq("id", req.user.id)
+                .eq("id", student.id)
                 .single();
         if (currentStudentError || !currentStudent) {
             return res.status(500).json({
@@ -350,7 +357,7 @@ export const submitExam = async (req, res) => {
                 "student-points": newStudentPoints,
                 points: newTotalPoints,
             })
-            .eq("id", req.user.id);
+            .eq("id", student.id);
         if (pointsError) {
             return res.status(500).json({
                 message: pointsError.message,
