@@ -89,8 +89,9 @@ export const leaderBoard = async (req, res) => {
 
         const { data: students, error } = await supabase
             .from("students")
-            .select("id, full_name, points ,  area")
+            .select("id, full_name, points, area, stage, grade")
             .eq("stage", student.stage)
+            .eq("grade", student.grade)
             .order("points", { ascending: false });
 
         if (error) {
