@@ -306,13 +306,23 @@ export const addPoints = async (req , res )=>{
             .single();
 
         if (updateError) {
-            return res.status(500).json({ message: updateError.message });
+                console.error("❌ SUPABASE UPDATE ERROR:", updateError);
+                return res.status(500).json({
+                    message: updateError.message,
+                    details: updateError.details,
+                    hint: updateError.hint,
+                    code: updateError.code,
+                });
         }
 
         return res.json({ message: "Points added successfully", student });
 
     }catch(error){
-        return res.status(500).json({ message: error.message });
+    console.error("❌ ADD POINTS ERROR:", error);
+    return res.status(500).json({
+        message: error.message,
+        stack: error.stack,
+    });
     }
 }
 export const createExam = async (req, res) => {
